@@ -13,11 +13,11 @@ idna==3.3
 mypy-extensions==0.4.3
 outcome==1.1.0
 pathspec==0.9.0
-platformdirs==2.4.1
+platformdirs==2.4.0
 pycparser==2.21
 pyOpenSSL==21.0.0
 pytube==11.0.2
-selenium==4.1.0
+selenium==4.0.0a7
 six==1.16.0
 sniffio==1.2.0
 sortedcontainers==2.4.0
