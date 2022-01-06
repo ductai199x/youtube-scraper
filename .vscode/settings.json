@@ -1,0 +1,12 @@
+{
+    "editor.defaultFormatter": null,
+    "editor.formatOnSave": false,  // enable per language
+    "[python]": {
+        "editor.formatOnSave": true
+    },
+    "python.formatting.provider": "black",
+    "python.formatting.blackPath": "./Scripts/black.exe",
+    "python.formatting.blackArgs": [
+        "-l 120",
+    ],
+}

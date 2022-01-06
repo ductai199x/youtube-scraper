@@ -5,3 +5,5 @@ include/
 Lib/
 Scripts/
 pyvenv.cfg
+
+downloads/
