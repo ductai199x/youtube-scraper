@@ -64,9 +64,9 @@ class ChromeDriverManager:
 
         os = platform.system()
         if os == "Linux":
-            exec_path = "chromedriver_linux64_v97_0"
+            exec_path = "./chromedriver_linux64_v97_0"
         elif os == "Windows":
-            exec_path = "chromedriver_win32_v97_0.exe"
+            exec_path = "./chromedriver_win32_v97_0.exe"
         else:
             raise NotImplementedError(f"No driver for platform `{os}`")
 

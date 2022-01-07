@@ -3,6 +3,7 @@ from multiprocessing import Pool
 from typing import *
 
 from pytube import YouTube
+from tqdm.auto import tqdm
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -32,8 +33,10 @@ download_folder = "./downloads"
 
 async def get_video_urls() -> Set:
     video_urls = set()
+    print("INFO: Setting up the chrome headless driver..")
     cdm = ChromeDriverManager(headless=True)
     try:
+        print(f"INFO: Opening {url}..")
         cdm.open_url(url)
 
         try:
@@ -42,11 +45,13 @@ async def get_video_urls() -> Set:
         except TimeoutException:
             print("Timed out waiting for page to load search bar")
 
+        print(f"INFO: Input search string: {search_string}..")
         search_bar = cdm.driver.find_element(By.XPATH, search_bar_xpath)
         search_bar.send_keys(search_string)
         await asyncio.sleep(2)
         search_bar.send_keys(Keys.RETURN)
 
+        print(f"INFO: Waiting for search results to appear..")
         await asyncio.wait_for(check_if_page_loaded(cdm.driver, url), timeout=20.0)
 
         try:
@@ -55,7 +60,9 @@ async def get_video_urls() -> Set:
         except TimeoutException:
             print("Timed out waiting for page to load filter button")
 
+        print(f"INFO: Processing result page..")
         last_thumbnail_loc = 0
+        pbar = tqdm(total = None)
         while len(video_urls) < max_num_videos:
             thumbnails = cdm.driver.find_elements(By.XPATH, thumbnail_xpath)
             if thumbnails[-1].location["y"] > last_thumbnail_loc:
@@ -64,10 +71,13 @@ async def get_video_urls() -> Set:
                     video_url: str = t.get_attribute("href")
                     if video_url.find("list") < 0 and video_url.startswith("https://www.youtube.com"):
                         video_urls.add(video_url)
+                        pbar.set_description(f"Processing {len(video_urls)}/{max_num_videos}")
+                        pbar.update()
                 last_thumbnail_loc = thumbnails[-1].location["y"]
 
             cdm.driver.execute_script(f"window.scrollBy(0, 1000)", "")
-            await asyncio.sleep(2.5)  # wait for page to load
+            await asyncio.sleep(2.0)  # wait for page to load
+        pbar.close()
 
         cdm.close_driver()
     except Exception as e:
@@ -78,18 +88,21 @@ async def get_video_urls() -> Set:
         return video_urls
 
 
-def on_complete_download(file_path: str):
+def on_complete_download(_, file_path: str):
     print(f"Finished downloading {file_path}")
 
 
 def download_video(url: str):
-    yt = YouTube(url, on_complete_callback=on_complete_download)
-    print(yt.title, url)
-    mp4files = yt.streams.filter(file_extension="mp4", res="1080p")
-    if len(mp4files) > 0:
-        mp4files[-1].download(output_path=download_folder)
-    else:
-        print(f"No 1080p resolution or mp4 stream doesn't exist for {url}.")
+    try:
+        yt = YouTube(url, on_complete_callback=on_complete_download)
+        print(yt.title, url)
+        mp4files = yt.streams.filter(file_extension="mp4", res="1080p")
+        if len(mp4files) > 0:
+            mp4files[-1].download(output_path=download_folder, max_retries=1000, timeout=1000)
+        else:
+            print(f"No 1080p resolution or mp4 stream doesn't exist for {url}.")
+    except Exception as e:
+        print(f"File {yt.title} ({url}) has failed with {repr(e)}")
 
 
 async def main():
