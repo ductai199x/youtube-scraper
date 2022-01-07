@@ -40,7 +40,9 @@ async def get_video_urls() -> Set:
         cdm.open_url(url)
 
         try:
-            element_present = EC.presence_of_element_located((By.XPATH, search_bar_xpath))
+            element_present = EC.presence_of_element_located(
+                (By.XPATH, search_bar_xpath)
+            )
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
             print("Timed out waiting for page to load search bar")
@@ -55,23 +57,29 @@ async def get_video_urls() -> Set:
         await asyncio.wait_for(check_if_page_loaded(cdm.driver, url), timeout=20.0)
 
         try:
-            element_present = EC.presence_of_element_located((By.XPATH, filter_btn_xpath))
+            element_present = EC.presence_of_element_located(
+                (By.XPATH, filter_btn_xpath)
+            )
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
             print("Timed out waiting for page to load filter button")
 
         print(f"INFO: Processing result page..")
         last_thumbnail_loc = 0
-        pbar = tqdm(total = None)
+        pbar = tqdm(total=None)
         while len(video_urls) < max_num_videos:
             thumbnails = cdm.driver.find_elements(By.XPATH, thumbnail_xpath)
             if thumbnails[-1].location["y"] > last_thumbnail_loc:
                 # print(len(video_urls), last_thumbnail_loc, thumbnails[-1].location["y"])
                 for t in thumbnails:
                     video_url: str = t.get_attribute("href")
-                    if video_url.find("list") < 0 and video_url.startswith("https://www.youtube.com"):
+                    if video_url.find("list") < 0 and video_url.startswith(
+                        "https://www.youtube.com"
+                    ):
                         video_urls.add(video_url)
-                        pbar.set_description(f"Processing {len(video_urls)}/{max_num_videos}")
+                        pbar.set_description(
+                            f"Processing {len(video_urls)}/{max_num_videos}"
+                        )
                         pbar.update()
                 last_thumbnail_loc = thumbnails[-1].location["y"]
 
@@ -98,7 +106,9 @@ def download_video(url: str):
         print(yt.title, url)
         mp4files = yt.streams.filter(file_extension="mp4", res="1080p")
         if len(mp4files) > 0:
-            mp4files[-1].download(output_path=download_folder, max_retries=1000, timeout=1000)
+            mp4files[-1].download(
+                output_path=download_folder, max_retries=100, timeout=300
+            )
         else:
             print(f"No 1080p resolution or mp4 stream doesn't exist for {url}.")
     except Exception as e:
