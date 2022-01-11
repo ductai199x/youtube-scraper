@@ -1,3 +1,4 @@
+import os
 import asyncio
 from multiprocessing import Pool
 from typing import *
@@ -33,10 +34,10 @@ download_folder = "./downloads"
 
 async def get_video_urls() -> Set:
     video_urls = set()
-    print("INFO: Setting up the chrome headless driver..")
+    print("[INFO ]:\t\tSetting up the chrome headless driver..")
     cdm = ChromeDriverManager(headless=True)
     try:
-        print(f"INFO: Opening {url}..")
+        print(f"[INFO ]:\t\tOpening {url}..")
         cdm.open_url(url)
 
         try:
@@ -45,15 +46,15 @@ async def get_video_urls() -> Set:
             )
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
-            print("Timed out waiting for page to load search bar")
+            print("[ERROR]:\t\tTimed out waiting for page to load search bar")
 
-        print(f"INFO: Input search string: {search_string}..")
+        print(f"[INFO ]:\t\tInput search string: {search_string}..")
         search_bar = cdm.driver.find_element(By.XPATH, search_bar_xpath)
         search_bar.send_keys(search_string)
         await asyncio.sleep(2)
         search_bar.send_keys(Keys.RETURN)
 
-        print(f"INFO: Waiting for search results to appear..")
+        print(f"[INFO ]:\t\tWaiting for search results to appear..")
         await asyncio.wait_for(check_if_page_loaded(cdm.driver, url), timeout=20.0)
 
         try:
@@ -62,9 +63,9 @@ async def get_video_urls() -> Set:
             )
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
-            print("Timed out waiting for page to load filter button")
+            print("[ERROR]:\t\tTimed out waiting for page to load filter button")
 
-        print(f"INFO: Processing result page..")
+        print(f"[INFO ]:\t\tProcessing result page..")
         last_thumbnail_loc = 0
         pbar = tqdm(total=None)
         while len(video_urls) < max_num_videos:
@@ -97,27 +98,40 @@ async def get_video_urls() -> Set:
 
 
 def on_complete_download(_, file_path: str):
-    print(f"Finished downloading {file_path}")
+    print(f"[FINISHED]:\t\tFinished downloading {file_path}")
 
 
 def download_video(url: str):
     try:
+        metadata_file = open("metadata.txt", "a")
         yt = YouTube(url, on_complete_callback=on_complete_download)
-        print(yt.title, url)
         mp4files = yt.streams.filter(file_extension="mp4", res="1080p")
         if len(mp4files) > 0:
-            mp4files[-1].download(
-                output_path=download_folder, max_retries=100, timeout=300
-            )
+            yt_stream = mp4files[-1]
+            metadata_file.write(f"[VIDEO]\n{url}\n{yt.title}\n{yt.author}\n{yt.description}\n")
+            default_path = f"{download_folder}/{yt_stream.default_filename}"
+            filesize_in_stream = yt_stream.filesize
+            filesize_on_disk = os.path.getsize(default_path) if os.path.exists(default_path) else -1
+            print(f"[INFO ]:\t\t{yt.title}, {filesize_in_stream}, {filesize_on_disk}, {filesize_in_stream == filesize_on_disk}")
+            if filesize_in_stream != filesize_on_disk:
+                print(f"[INFO ]:\t\tDownloading...{yt.title} ({url})")
+                yt_stream.download(
+                    output_path=download_folder, max_retries=100, timeout=300
+                )
+            else:
+                print(f"[INFO ]:\t\t{yt.title} has already been downloaded.")
         else:
-            print(f"No 1080p resolution or mp4 stream doesn't exist for {url}.")
+            print(f"[ERROR]:\t\tNo 1080p resolution or mp4 stream doesn't exist for {url}.")
+        metadata_file.close()
     except Exception as e:
-        print(f"File {yt.title} ({url}) has failed with {repr(e)}")
+        print(f"[ERROR]:\t\tFile {yt.title} ({url}) has failed with {repr(e)}")
 
 
 async def main():
     video_urls = await get_video_urls()
     video_urls = list(video_urls)
+    with open("metadata.txt", "w"):
+        pass
     with Pool(max_num_proc) as p:
         print(p.map(download_video, video_urls))
 
