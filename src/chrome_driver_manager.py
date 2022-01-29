@@ -22,9 +22,7 @@ class ChromeDriverManager:
         self.gpu = None if gpu else "--disable-gpu"
         self.extensions = None if extensions else "--disable-extensions"
         self.js = None if js else "--disable-javascript"
-        self.ignore_cert_err = (
-            "--ignore-certificate-errors" if ignore_cert_err else None
-        )
+        self.ignore_cert_err = "--ignore-certificate-errors" if ignore_cert_err else None
         self.wait = wait
 
         id, driver = self.init_driver(
@@ -41,9 +39,7 @@ class ChromeDriverManager:
         self.current_tab = driver.current_window_handle
 
     @staticmethod
-    def init_driver(
-        headless, gpu, extensions, js, ignore_cert_err, wait, eager
-    ) -> Tuple[str, webdriver.Chrome]:
+    def init_driver(headless, gpu, extensions, js, ignore_cert_err, wait, eager) -> Tuple[str, webdriver.Chrome]:
         options = Options()
         if headless:
             options.add_argument(headless)

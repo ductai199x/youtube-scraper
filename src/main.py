@@ -41,9 +41,7 @@ async def get_video_urls() -> Set:
         cdm.open_url(url)
 
         try:
-            element_present = EC.presence_of_element_located(
-                (By.XPATH, search_bar_xpath)
-            )
+            element_present = EC.presence_of_element_located((By.XPATH, search_bar_xpath))
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
             print("[ERROR]:\t\tTimed out waiting for page to load search bar")
@@ -58,9 +56,7 @@ async def get_video_urls() -> Set:
         await asyncio.wait_for(check_if_page_loaded(cdm.driver, url), timeout=20.0)
 
         try:
-            element_present = EC.presence_of_element_located(
-                (By.XPATH, filter_btn_xpath)
-            )
+            element_present = EC.presence_of_element_located((By.XPATH, filter_btn_xpath))
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
             print("[ERROR]:\t\tTimed out waiting for page to load filter button")
@@ -74,13 +70,9 @@ async def get_video_urls() -> Set:
                 # print(len(video_urls), last_thumbnail_loc, thumbnails[-1].location["y"])
                 for t in thumbnails:
                     video_url: str = t.get_attribute("href")
-                    if video_url.find("list") < 0 and video_url.startswith(
-                        "https://www.youtube.com"
-                    ):
+                    if video_url.find("list") < 0 and video_url.startswith("https://www.youtube.com"):
                         video_urls.add(video_url)
-                        pbar.set_description(
-                            f"Processing {len(video_urls)}/{max_num_videos}"
-                        )
+                        pbar.set_description(f"Processing {len(video_urls)}/{max_num_videos}")
                         pbar.update()
                 last_thumbnail_loc = thumbnails[-1].location["y"]
 
@@ -112,12 +104,12 @@ def download_video(url: str):
             default_path = f"{download_folder}/{yt_stream.default_filename}"
             filesize_in_stream = yt_stream.filesize
             filesize_on_disk = os.path.getsize(default_path) if os.path.exists(default_path) else -1
-            print(f"[INFO ]:\t\t{yt.title}, {filesize_in_stream}, {filesize_on_disk}, {filesize_in_stream == filesize_on_disk}")
+            print(
+                f"[INFO ]:\t\t{yt.title}, {filesize_in_stream}, {filesize_on_disk}, {filesize_in_stream == filesize_on_disk}"
+            )
             if filesize_in_stream != filesize_on_disk:
                 print(f"[INFO ]:\t\tDownloading...{yt.title} ({url})")
-                yt_stream.download(
-                    output_path=download_folder, max_retries=100, timeout=300
-                )
+                yt_stream.download(output_path=download_folder, max_retries=100, timeout=300)
             else:
                 print(f"[INFO ]:\t\t{yt.title} has already been downloaded.")
         else:
