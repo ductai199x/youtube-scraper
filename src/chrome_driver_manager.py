@@ -11,6 +11,7 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 class ChromeDriverManager:
     def __init__(
         self,
+        driver_version="101_0",
         headless=False,
         gpu=False,
         extensions=False,
@@ -19,6 +20,7 @@ class ChromeDriverManager:
         eager=False,
         wait=5,
     ):
+        self.driver_version = driver_version
         self.headless = "--headless" if headless else None
         self.gpu = None if gpu else "--disable-gpu"
         self.extensions = None if extensions else "--disable-extensions"
@@ -27,6 +29,7 @@ class ChromeDriverManager:
         self.wait = wait
 
         id, driver = self.init_driver(
+            driver_version=self.driver_version,
             headless=self.headless,
             gpu=self.gpu,
             extensions=self.extensions,
@@ -41,7 +44,7 @@ class ChromeDriverManager:
 
     @staticmethod
     def init_driver(
-        headless, gpu, extensions, js, ignore_cert_err, wait, eager
+        driver_version, headless, gpu, extensions, js, ignore_cert_err, wait, eager
     ) -> Tuple[str, webdriver.Chrome]:
         options = Options()
         if headless:
@@ -67,9 +70,9 @@ class ChromeDriverManager:
 
         os = platform.system()
         if os == "Linux":
-            exec_path = "./chromedriver_linux64_v97_0"
+            exec_path = f"./chromedriver_linux64_v{driver_version}"
         elif os == "Windows":
-            exec_path = "./chromedriver_win32_v97_0.exe"
+            exec_path = f"./chromedriver_win32_v{driver_version}.exe"
         else:
             raise NotImplementedError(f"No driver for platform `{os}`")
 
