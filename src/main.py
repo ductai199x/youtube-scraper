@@ -1,15 +1,15 @@
-import os
 import asyncio
+import os
 from multiprocessing import Pool
 from typing import *
 
 from pytube import YouTube
-from tqdm.auto import tqdm
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from tqdm.auto import tqdm
 
 from chrome_driver_manager import ChromeDriverManager
 
@@ -20,7 +20,7 @@ async def check_if_page_loaded(driver, prev_url):
 
 
 url = "https://www.youtube.com"
-max_num_videos = 100
+max_num_videos = 10
 max_num_proc = 10
 search_string = "celebrity documentaries"
 search_bar_xpath = "//input[@id='search']"

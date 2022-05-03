@@ -8,4 +8,7 @@ pyvenv.cfg
 *__pycache__*
 
 downloads/
+outputs/
+*scratch*
+*stuff*
 metadata.txt

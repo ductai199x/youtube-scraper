@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 import platform
 from typing import *
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.webdriver import WebDriver
@@ -39,7 +40,9 @@ class ChromeDriverManager:
         self.current_tab = driver.current_window_handle
 
     @staticmethod
-    def init_driver(headless, gpu, extensions, js, ignore_cert_err, wait, eager) -> Tuple[str, webdriver.Chrome]:
+    def init_driver(
+        headless, gpu, extensions, js, ignore_cert_err, wait, eager
+    ) -> Tuple[str, webdriver.Chrome]:
         options = Options()
         if headless:
             options.add_argument(headless)
