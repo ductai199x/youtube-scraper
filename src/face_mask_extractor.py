@@ -11,7 +11,7 @@ import torchvision
 from scipy.spatial import ConvexHull
 from tqdm.auto import tqdm
 
-from facemeshdetector import FaceMeshDetector
+from face_mesh_detector import FaceMeshDetector
 
 decord.bridge.set_bridge("torch")
 

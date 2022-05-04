@@ -15,21 +15,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from tqdm.auto import tqdm
 
 from chrome_driver_manager import ChromeDriverManager
-
-
-def get_all_files(path, prefix="", suffix="", contains=("",), excludes=("",)):
-    if not os.path.isdir(path):
-        raise ValueError(f"{path} is not a valid directory.")
-    files = []
-    for pre, dirs, basenames in os.walk(path):
-        for name in basenames:
-            if name.startswith(prefix) and name.endswith(suffix) and any([c in name for c in contains]):
-                if excludes == ("",):
-                    files.append(os.path.join(pre, name))
-                else:
-                    if all([e not in name for e in excludes]):
-                        files.append(os.path.join(pre, name))
-    return files
+from helper import get_all_files
 
 
 async def check_if_page_loaded(driver, prev_url):
