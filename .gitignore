@@ -1,5 +1,6 @@
 bin/
 lib/
+etc/
 share/
 include/
 Lib/

@@ -9,4 +9,5 @@
     "python.formatting.blackArgs": [
         "-l", "110"
     ],
+    "nvidia-smi-plus.refresh.autoRefresh": false,
 }

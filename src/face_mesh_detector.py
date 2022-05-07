@@ -28,7 +28,7 @@ class FaceMeshDetector:
 
         self.mpDraw = mp.solutions.drawing_utils
         self.mpFaceMesh = mp.solutions.face_mesh
-        self.mpFaceMeshConn = mp.solution.face_mesh_connections
+        self.mpFaceMeshConn = mp.solutions.face_mesh_connections
         self.faceMesh = self.mpFaceMesh.FaceMesh(self.staticMode, self.maxFaces, True, self.minDetectionCon)
         self.drawSpec = self.mpDraw.DrawingSpec(thickness=1, circle_radius=2)
 
@@ -55,6 +55,7 @@ class FaceMeshDetector:
                     x, y = int(lm.x * iw), int(lm.y * ih)
                     face.append([x, y])
                 faces.append(face)
+        self.faceMesh.close()
         return img, faces
 
 

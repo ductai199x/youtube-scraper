@@ -3,7 +3,7 @@ import os
 import pickle
 import shlex
 import subprocess
-from multiprocessing import Manager, Pool, Queue
+from multiprocessing import Manager, Pool, Process
 from typing import *
 
 from pytube import YouTube
@@ -28,19 +28,20 @@ open_proc = lambda cmd_list: subprocess.Popen(
 )
 
 url = "https://www.youtube.com"
-max_num_videos = 10
+max_num_videos = 12
 max_num_proc = 10
-search_string = "celebrity documentaries"
 search_bar_xpath = "//input[@id='search']"
 filter_btn_xpath = "//tp-yt-paper-button[@aria-label='Search filters']"
 thumbnail_xpath = """
-//div[@id='contents' and @class='style-scope ytd-section-list-renderer']
+//ytd-video-renderer[@class='style-scope ytd-item-section-renderer'] 
+//div[@id='dismissible' and @class='style-scope ytd-video-renderer'] 
 //a[@id='thumbnail' and ./yt-img-shadow/img[contains(@src, 'jpg')]]
 """.strip()
-download_folder = "./downloads"
+dataset_root_dir = "/media/nas2/Tai/4-deepfake-data"
+download_dir = f"{dataset_root_dir}/downloads"
 
 
-async def get_video_urls() -> Set:
+async def get_video_urls(search_string) -> Set:
     video_urls = set()
     print("[INFO ]:\t\tSetting up the chrome headless driver..")
     cdm = ChromeDriverManager(headless=True)
@@ -79,6 +80,9 @@ async def get_video_urls() -> Set:
                 for t in thumbnails:
                     video_url: str = t.get_attribute("href")
                     if video_url.find("list") < 0 and video_url.startswith("https://www.youtube.com"):
+                        video_title = YouTube(video_url).title.lower()
+                        if any(list(map(lambda s: s in video_title, ["amber", "heard", "johnny", "depp", "live", "trial"]))):
+                            continue
                         video_urls.add(video_url)
                         pbar.set_description(f"Processing {len(video_urls)}/{max_num_videos}")
                         pbar.update()
@@ -94,57 +98,42 @@ async def get_video_urls() -> Set:
         if cdm.driver.session_id:
             cdm.close_driver()
     finally:
-        return video_urls
+        return list(video_urls)
 
 
 def on_complete_download(_, file_path: str):
     print(f"[FINISHED]:\t\tFinished downloading {file_path}")
 
 
-def download_video(url: str, queue: Queue):
+def download_video(url: str, search_string: str, metadata):
     try:
         yt = YouTube(url, on_complete_callback=on_complete_download)
         mp4files = yt.streams.filter(file_extension="mp4", res="1080p")
         if len(mp4files) > 0:
             yt_stream = mp4files[-1]
-            default_path = f"{download_folder}/{yt_stream.default_filename}"
+            default_path = f"{download_dir}/{yt_stream.default_filename}"
             filesize_in_stream = yt_stream.filesize
             filesize_on_disk = os.path.getsize(default_path) if os.path.exists(default_path) else -1
-            queue.put(
-                {
-                    url: {
-                        "title": yt.title,
-                        "author": yt.author,
-                        "desc": yt.description,
-                        "size": filesize_in_stream,
-                        "path": default_path,
-                    }
-                }
-            )
+            metadata[url] = {
+                "search_string": search_string,
+                "title": yt.title,
+                "author": yt.author,
+                "desc": yt.description,
+                "size": filesize_in_stream,
+                "path": default_path,
+            }
             print(
                 f"[INFO ]:\t\t{yt.title}, {filesize_in_stream}, {filesize_on_disk}, {filesize_in_stream == filesize_on_disk}"
             )
             if filesize_in_stream != filesize_on_disk:
                 print(f"[INFO ]:\t\tDownloading...{yt.title} ({url})")
-                yt_stream.download(output_path=download_folder, max_retries=100, timeout=300)
+                yt_stream.download(output_path=download_dir, max_retries=100, timeout=300)
             else:
                 print(f"[INFO ]:\t\t{yt.title} has already been downloaded.")
         else:
             print(f"[ERROR]:\t\tNo 1080p resolution or mp4 stream doesn't exist for {url}.")
     except Exception as e:
         print(f"[ERROR]:\t\tFile {yt.title} ({url}) has failed with {repr(e)}")
-
-
-metadata = []
-
-
-def metadata_write_listener(queue: Queue):
-    global metadata
-    while True:
-        data = queue.get()
-        if data == "kill":
-            break
-        metadata.append(data)
 
 
 def re_encode_as_h264(path: str):
@@ -165,16 +154,15 @@ def re_encode_as_h264(path: str):
         print(f"Converting {path}({codec_name}) -> {new_file_path}(h264)...")
         subprocess.run(
             shlex.split(
-                f"ffmpeg "
+                f"ffmpeg -loglevel error -stats "
                 + "-hwaccel cuda "
-                + "-hwaccel_device 1 "
+                + "-hwaccel_device 0 "
                 + f'-i "{path}" '
                 + "-c:v h264_nvenc "
-                + "-b:v 3000k "
-                + "-preset medium "
-                + "-crf 23 "
+                + "-b:v 3500k "
+                + "-preset fast "
                 + "-c:a aac "
-                + "-b:a 160k "
+                + "-b:a 260k "
                 + "-vf format=yuv420p "
                 + "-movflags +faststart "
                 + f'"{new_file_path}"'
@@ -191,30 +179,39 @@ def re_encode_as_h264(path: str):
 
 
 async def main():
-    video_urls = await get_video_urls()
-    video_urls = list(video_urls)
+    search_strings = ["ariana grande", "justin bieber", "taylor swift", "selena gomez", 
+    "ed sheeran", "miley cyrus", "lady gaga", "billie eilish", "camila cabello", 
+    "bruno mars", "charlie puth", "tom holland", "dwayne johnson", "scarlett johansson",
+    "daniel craig", "tom cruise", "liam neeson", "rami malek", "keanu reeves",
+    "benedict cumberbatch", "chris pratt", "jennifer lawrence"]
+    print('\n'.join(search_strings))
 
-    metadata_queue_manager = Manager()
-    metadata_queue = metadata_queue_manager.Queue()
+    video_urls = []
+    for ss in search_strings:
+        extracted_urls = await get_video_urls(f"{ss} interview")
+        video_urls += list(zip(extracted_urls, [ss]*len(extracted_urls)))
+
+    with open("download_list.txt", "w") as f:
+        for i, (url, search_string) in enumerate(video_urls):
+            f.write(f"{i+1}, {url}, {search_string}, {YouTube(url).title}\n")
+
+    multiproc_manager = Manager()
+    metadata = multiproc_manager.dict()
 
     with Pool(max_num_proc) as p:
-        watcher = p.apply_async(metadata_write_listener, (metadata_queue,))
-
         jobs = []
-        for url in video_urls:
-            job = p.apply_async(download_video, (url, metadata_queue))
+        for url, search_string in video_urls:
+            job = p.apply_async(download_video, (url, search_string, metadata))
             jobs.append(job)
 
         # collect results from the workers through the pool result queue
         for job in jobs:
             job.get()
 
-        metadata_queue.put("kill")
+    with open(f"{dataset_root_dir}/metadata.pkl", "wb") as f:
+        pickle.dump(dict(metadata), f)
 
-    with open("metadata.pkl", "wb") as f:
-        pickle.dump(metadata, f)
-
-    downloaded_files = get_all_files(download_folder, suffix=".mp4")
+    downloaded_files = get_all_files(download_dir, suffix=".mp4")
     with Pool(2) as p:
         p.map(re_encode_as_h264, downloaded_files)
 
