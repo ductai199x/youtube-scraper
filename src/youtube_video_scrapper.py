@@ -2,11 +2,14 @@ import asyncio
 import os
 import pickle
 import shlex
+import shutil
 import subprocess
-from multiprocessing import Manager, Pool, Process
+from multiprocessing import Manager, Pool
 from typing import *
 
+import rich
 from pytube import YouTube
+from pytube.exceptions import PytubeError
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -39,38 +42,44 @@ thumbnail_xpath = """
 """.strip()
 dataset_root_dir = "/media/nas2/Tai/4-deepfake-data"
 download_dir = f"{dataset_root_dir}/downloads"
+h264_cvt_dir = f"{dataset_root_dir}/h264"
+console = rich.get_console()
 
 
 async def get_video_urls(search_string) -> Set:
     video_urls = set()
-    print("[INFO ]:\t\tSetting up the chrome headless driver..")
+    console.print("[bold blue][INFO ]:[/bold blue][blue]\t\tSetting up the chrome headless driver..")
     cdm = ChromeDriverManager(headless=True)
     try:
-        print(f"[INFO ]:\t\tOpening {url}..")
+        console.print(f"[bold blue][INFO ]:[/bold blue][blue]\t\tOpening {url}..")
         cdm.open_url(url)
 
         try:
             element_present = EC.presence_of_element_located((By.XPATH, search_bar_xpath))
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
-            print("[ERROR]:\t\tTimed out waiting for page to load search bar")
+            console.print(
+                "[bold red][ERROR]:[/bold red][red]\t\tTimed out waiting for page to load search bar"
+            )
 
-        print(f"[INFO ]:\t\tInput search string: {search_string}..")
+        console.print(f"[bold blue][INFO ]:[/bold blue][blue]\t\tInput search string: {search_string}..")
         search_bar = cdm.driver.find_element(By.XPATH, search_bar_xpath)
         search_bar.send_keys(search_string)
         await asyncio.sleep(2)
         search_bar.send_keys(Keys.RETURN)
 
-        print(f"[INFO ]:\t\tWaiting for search results to appear..")
+        console.print(f"[bold blue][INFO ]:[/bold blue][blue]\t\tWaiting for search results to appear..")
         await asyncio.wait_for(check_if_page_loaded(cdm.driver, url), timeout=20.0)
 
         try:
             element_present = EC.presence_of_element_located((By.XPATH, filter_btn_xpath))
             WebDriverWait(cdm.driver, 5.0).until(element_present)
         except TimeoutException:
-            print("[ERROR]:\t\tTimed out waiting for page to load filter button")
+            console.print(
+                "[bold red][ERROR]:[/bold red][red]\t\tTimed out waiting for page to load filter button"
+            )
 
-        print(f"[INFO ]:\t\tProcessing result page..")
+        console.print(f"[bold blue][INFO ]:[/bold blue][blue]\t\tProcessing result page..")
         last_thumbnail_loc = 0
         pbar = tqdm(total=None)
         while len(video_urls) < max_num_videos:
@@ -80,8 +89,19 @@ async def get_video_urls(search_string) -> Set:
                 for t in thumbnails:
                     video_url: str = t.get_attribute("href")
                     if video_url.find("list") < 0 and video_url.startswith("https://www.youtube.com"):
-                        video_title = YouTube(video_url).title.lower()
-                        if any(list(map(lambda s: s in video_title, ["amber", "heard", "johnny", "depp", "live", "trial"]))):
+                        yt_obj = YouTube(video_url)
+                        video_title = yt_obj.title.lower()
+                        video_streams = mp4files = yt_obj.streams.filter(file_extension="mp4", res="1080p")
+                        if len(video_streams) < 1:
+                            continue
+                        if any(
+                            list(
+                                map(
+                                    lambda s: s in video_title,
+                                    ["amber", "heard", "johnny", "depp", "live", "trial"],
+                                )
+                            )
+                        ):
                             continue
                         video_urls.add(video_url)
                         pbar.set_description(f"Processing {len(video_urls)}/{max_num_videos}")
@@ -94,7 +114,7 @@ async def get_video_urls(search_string) -> Set:
 
         cdm.close_driver()
     except Exception as e:
-        print(e)
+        console.print(f"[bold red][ERROR]:[/bold red][red]\t\t{e}")
         if cdm.driver.session_id:
             cdm.close_driver()
     finally:
@@ -102,7 +122,7 @@ async def get_video_urls(search_string) -> Set:
 
 
 def on_complete_download(_, file_path: str):
-    print(f"[FINISHED]:\t\tFinished downloading {file_path}")
+    console.print(f"[bold green][FINISHED]:[/bold green][green]\t\tFinished downloading {file_path}")
 
 
 def download_video(url: str, search_string: str, metadata):
@@ -111,7 +131,7 @@ def download_video(url: str, search_string: str, metadata):
         mp4files = yt.streams.filter(file_extension="mp4", res="1080p")
         if len(mp4files) > 0:
             yt_stream = mp4files[-1]
-            default_path = f"{download_dir}/{yt_stream.default_filename}"
+            default_path = f"{download_dir}/{yt.video_id}"
             filesize_in_stream = yt_stream.filesize
             filesize_on_disk = os.path.getsize(default_path) if os.path.exists(default_path) else -1
             metadata[url] = {
@@ -122,23 +142,40 @@ def download_video(url: str, search_string: str, metadata):
                 "size": filesize_in_stream,
                 "path": default_path,
             }
-            print(
-                f"[INFO ]:\t\t{yt.title}, {filesize_in_stream}, {filesize_on_disk}, {filesize_in_stream == filesize_on_disk}"
+            console.print(
+                f"[bold blue][INFO ]:[/bold blue][blue]\t\t{yt.title}, {filesize_in_stream}, "
+                + f"{filesize_on_disk}, {filesize_in_stream == filesize_on_disk}"
             )
             if filesize_in_stream != filesize_on_disk:
-                print(f"[INFO ]:\t\tDownloading...{yt.title} ({url})")
-                yt_stream.download(output_path=download_dir, max_retries=100, timeout=300)
+                console.print(
+                    f"[bold blue][INFO ]:[/bold blue][blue]\t\tDownloading...{yt.title} ({yt.video_id}.mp4)"
+                )
+                yt_stream.download(
+                    output_path=download_dir,
+                    filename=f"{yt.video_id}.mp4",
+                    max_retries=100,
+                    timeout=300,
+                )
             else:
-                print(f"[INFO ]:\t\t{yt.title} has already been downloaded.")
+                console.print(
+                    f"[bold blue][INFO ]:[/bold blue][blue]\t\t{yt.title} has already been downloaded."
+                )
         else:
-            print(f"[ERROR]:\t\tNo 1080p resolution or mp4 stream doesn't exist for {url}.")
-    except Exception as e:
-        print(f"[ERROR]:\t\tFile {yt.title} ({url}) has failed with {repr(e)}")
+            console.print(
+                f"[bold red][ERROR]:[/bold red][red]\t\tNo 1080p resolution or mp4 stream doesn't exist "
+                + f"for {yt.title} {yt.video_id}"
+            )
+    except (Exception, PytubeError) as e:
+        console.print(
+            f"[bold red][ERROR]:[/bold red][red]\t\tFile {yt.title} ({yt.video_id}.mp4) "
+            + f"has failed with {repr(e)}"
+        )
 
 
 def re_encode_as_h264(path: str):
     dir, fname = os.path.split(path)
     basename, ext = os.path.splitext(fname)
+    new_file_path = f"{h264_cvt_dir}/{basename}.mp4"
 
     get_codec = subprocess.run(
         shlex.split(
@@ -148,10 +185,12 @@ def re_encode_as_h264(path: str):
         ),
         stdout=subprocess.PIPE,
     )
-    codec_name = str(get_codec.stdout.decode("utf-8"))
+    codec_name = str(get_codec.stdout.decode("utf-8")).strip()
     if codec_name != "h264":
-        new_file_path = f"{dir}/{basename}_h264.mp4"
-        print(f"Converting {path}({codec_name}) -> {new_file_path}(h264)...")
+        console.print(
+            f"[bold blue][INFO ]:[/bold blue][blue]\t\tConverting {path}({codec_name}) "
+            + f"-> {new_file_path}(h264)..."
+        )
         subprocess.run(
             shlex.split(
                 f"ffmpeg -loglevel error -stats "
@@ -159,10 +198,10 @@ def re_encode_as_h264(path: str):
                 + "-hwaccel_device 0 "
                 + f'-i "{path}" '
                 + "-c:v h264_nvenc "
-                + "-b:v 3500k "
+                + "-b:v 6500k "
                 + "-preset fast "
                 + "-c:a aac "
-                + "-b:a 260k "
+                + "-b:a 960k "
                 + "-vf format=yuv420p "
                 + "-movflags +faststart "
                 + f'"{new_file_path}"'
@@ -171,29 +210,55 @@ def re_encode_as_h264(path: str):
         )
         new_size = os.path.getsize(new_file_path)
         if new_size == 0:
-            print(f"\n\nERROR!!! Delete h264 version {new_file_path}")
+            console.print(
+                f"\n\n[bold red][ERROR]:[/bold red][red]\t\tNew file's size is 0! "
+                + f"Delete h264 version {new_file_path}"
+            )
             os.remove(new_file_path)
-        else:
-            os.remove(path)
-            os.rename(new_file_path, path)
+    else:
+        shutil.copy(path, new_file_path)
 
 
 async def main():
-    search_strings = ["ariana grande", "justin bieber", "taylor swift", "selena gomez", 
-    "ed sheeran", "miley cyrus", "lady gaga", "billie eilish", "camila cabello", 
-    "bruno mars", "charlie puth", "tom holland", "dwayne johnson", "scarlett johansson",
-    "daniel craig", "tom cruise", "liam neeson", "rami malek", "keanu reeves",
-    "benedict cumberbatch", "chris pratt", "jennifer lawrence"]
-    print('\n'.join(search_strings))
+    search_strings = [
+        "ariana grande",
+        "justin bieber",
+        "taylor swift",
+        "selena gomez",
+        "ed sheeran",
+        "miley cyrus",
+        "lady gaga",
+        "billie eilish",
+        "camila cabello",
+        "bruno mars",
+        "charlie puth",
+        "tom holland",
+        "dwayne johnson",
+        "scarlett johansson",
+        "daniel craig",
+        "tom cruise",
+        "liam neeson",
+        "rami malek",
+        "keanu reeves",
+        "benedict cumberbatch",
+        "chris pratt",
+        "jennifer lawrence",
+    ]
+    print("\n".join(search_strings))
 
     video_urls = []
     for ss in search_strings:
         extracted_urls = await get_video_urls(f"{ss} interview")
-        video_urls += list(zip(extracted_urls, [ss]*len(extracted_urls)))
+        video_urls += list(zip(extracted_urls, [ss] * len(extracted_urls)))
 
-    with open("download_list.txt", "w") as f:
+    with open(f"{dataset_root_dir}/download_list.txt", "w") as f:
         for i, (url, search_string) in enumerate(video_urls):
             f.write(f"{i+1}, {url}, {search_string}, {YouTube(url).title}\n")
+
+    with open(f"{dataset_root_dir}/download_list.txt", "r") as f:
+        for line in f:
+            fields = line.split(", ")
+            video_urls.append((fields[1], fields[2]))
 
     multiproc_manager = Manager()
     metadata = multiproc_manager.dict()
@@ -211,6 +276,8 @@ async def main():
     with open(f"{dataset_root_dir}/metadata.pkl", "wb") as f:
         pickle.dump(dict(metadata), f)
 
+    if not os.path.exists(h264_cvt_dir):
+        os.makedirs(h264_cvt_dir)
     downloaded_files = get_all_files(download_dir, suffix=".mp4")
     with Pool(2) as p:
         p.map(re_encode_as_h264, downloaded_files)
