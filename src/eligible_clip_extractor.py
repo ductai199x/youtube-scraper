@@ -15,8 +15,12 @@ from helper import get_all_files
 decord.bridge.set_bridge("torch")
 
 dataset_root_dir = "/media/nas2/Tai/4-deepfake-data"
-download_dir = f"{dataset_root_dir}/downloads"
-extract_dir = f"{dataset_root_dir}/output"
+dataset_root_dir = "/media/nas2/Tai/4-deepfake-data"
+h264_cvt_dir = f"{dataset_root_dir}/h264_batch_2"
+download_dir = h264_cvt_dir
+extract_dir = f"{dataset_root_dir}/output_batch_2"
+download_list_txt = f"{dataset_root_dir}/download_list_batch_2.txt"
+metadata_file = f"{dataset_root_dir}/metadata_batch_2.pkl"
 scaler = 0.3
 resize_fn = torchvision.transforms.Resize((int(1080 * scaler), int(1920 * scaler)))
 max_frames_per_batch = 80
@@ -104,6 +108,7 @@ def extract_seqs(video_path: str, start_idx: int, end_idx: int, fps: int, prefix
         fps (int): average fps
         prefix (str, optional): output file prefix. Defaults to "".
     """
+    print("Extracting", video_path, start_idx, end_idx, fps, prefix)
     vr = decord.VideoReader(video_path, ctx=decord.gpu(gpu_idx) if is_gpu else decord.cpu(0))
     if start_idx >= len(vr): return
     batches = vr.get_batch(list(torch.arange(start_idx, min(end_idx, len(vr))))).cpu()
@@ -116,7 +121,7 @@ def main():
         os.makedirs(extract_dir)
 
     # video_paths = get_all_files(download_dir, suffix="mp4")
-    with open(f"{dataset_root_dir}/metadata.pkl", "rb") as f:
+    with open(metadata_file, "rb") as f:
         metadata = pickle.load(f)
 
     for url in tqdm(metadata):

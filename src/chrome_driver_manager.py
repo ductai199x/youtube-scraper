@@ -11,7 +11,7 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 class ChromeDriverManager:
     def __init__(
         self,
-        driver_version="101_0",
+        driver_version="110",
         headless=False,
         gpu=False,
         extensions=False,
